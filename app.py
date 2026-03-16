@@ -1,4 +1,5 @@
 from dash import Dash, html
+import pandas as pd
 
 app = Dash(__name__)
 server = app.server
@@ -7,7 +8,7 @@ app.layout = html.Div([
     html.H1("College Football Dashboard")
 ])
 
-app_df = appearances.copy()
+app_df = pd.read_pickle("data/cfb_games.pkl")
 
 app_df = app_df.dropna(subset=["team", "year", "decade"])
 app_df["team"] = app_df["team"].astype(str).str.strip()
