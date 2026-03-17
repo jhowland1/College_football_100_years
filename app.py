@@ -19,6 +19,8 @@ def panel_style():
         "borderRadius": "12px",
         "border": "1px solid #334155",
     }
+
+
 data_path = "data/cfb_games.pkl"
 
 df = pd.read_pickle(data_path)
@@ -27,6 +29,16 @@ df = df.copy()
 df["date"] = pd.to_datetime(df["timestamp"], unit="s", errors="coerce")
 df["year"] = df["date"].dt.year
 df["decade"] = (df["year"] // 10) * 10
+
+games_df = df[["date", "year", "decade", "Conf1", "Conf2"]].copy()
+games_df.columns = ["date", "year", "decade", "conference_1", "conference_2"]
+games_df["conference_1"] = games_df["conference_1"].astype(str).str.strip().replace({"nan": np.nan, "None": np.nan})
+games_df["conference_2"] = games_df["conference_2"].astype(str).str.strip().replace({"nan": np.nan, "None": np.nan})
+games_df["conference_1"] = games_df["conference_1"].fillna("Unknown")
+games_df["conference_2"] = games_df["conference_2"].fillna("Unknown")
+games_df = games_df.dropna(subset=["year", "decade"])
+games_df["year"] = games_df["year"].astype(int)
+games_df["decade"] = games_df["decade"].astype(int)
 
 team1_df = df[["date", "year", "decade", "Team1", "Conf1"]].copy()
 team1_df.columns = ["date", "year", "decade", "team", "conference"]
@@ -119,6 +131,18 @@ app.layout = html.Div(
             ],
         ),
         html.Div(
+            style={"marginBottom": "24px"},
+            children=[
+                html.Div(
+                    style=panel_style(),
+                    children=[
+                        html.H3("Total Games Played by Year"),
+                        dcc.Graph(id="games-line-chart"),
+                    ],
+                ),
+            ],
+        ),
+        html.Div(
             style={
                 "display": "grid",
                 "gridTemplateColumns": "1.2fr 1fr",
@@ -168,24 +192,6 @@ app.layout = html.Div(
 )
 
 
-def card_style():
-    return {
-        "backgroundColor": "#111827",
-        "padding": "18px",
-        "borderRadius": "12px",
-        "border": "1px solid #334155",
-    }
-
-
-def panel_style():
-    return {
-        "backgroundColor": "#111827",
-        "padding": "18px",
-        "borderRadius": "12px",
-        "border": "1px solid #334155",
-    }
-
-
 def make_card(title, value):
     return [
         html.Div(title, style={"color": "#94a3b8", "fontSize": "14px", "marginBottom": "8px"}),
@@ -200,32 +206,44 @@ def make_card(title, value):
     Output("card-last", "children"),
     Output("teams-table", "data"),
     Output("teams-bar-chart", "figure"),
+    Output("games-line-chart", "figure"),
     Input("conference-filter", "value"),
     Input("decade-filter", "value"),
 )
 def update_dashboard(selected_conference, selected_decade):
     filtered = app_df.copy()
+    filtered_games = games_df.copy()
 
     if selected_conference != "All":
         filtered = filtered[filtered["conference"] == selected_conference]
+        filtered_games = filtered_games[
+            (filtered_games["conference_1"] == selected_conference)
+            | (filtered_games["conference_2"] == selected_conference)
+        ]
 
     if selected_decade != "All":
         filtered = filtered[filtered["decade"] == selected_decade]
+        filtered_games = filtered_games[filtered_games["decade"] == selected_decade]
 
     if filtered.empty:
-        fig = px.bar(title="No data available")
-        fig.update_layout(
-            paper_bgcolor="#111827",
-            plot_bgcolor="#111827",
-            font_color="white",
-        )
+        empty_bar_fig = px.bar(title="No data available")
+        empty_line_fig = px.line(title="No data available")
+
+        for fig in (empty_bar_fig, empty_line_fig):
+            fig.update_layout(
+                paper_bgcolor="#111827",
+                plot_bgcolor="#111827",
+                font_color="white",
+            )
+
         return (
             make_card("Total Appearances", 0),
             make_card("Unique Teams", 0),
             make_card("First Year", "—"),
             make_card("Last Year", "—"),
             [],
-            fig,
+            empty_bar_fig,
+            empty_line_fig,
         )
 
     total_appearances = len(filtered)
@@ -247,7 +265,7 @@ def update_dashboard(selected_conference, selected_decade):
     table_data = summary.head(15).to_dict("records")
     chart_df = summary.head(10).sort_values("appearances", ascending=True)
 
-    fig = px.bar(
+    bar_fig = px.bar(
         chart_df,
         x="appearances",
         y="team",
@@ -255,10 +273,32 @@ def update_dashboard(selected_conference, selected_decade):
         orientation="h",
         title="Top 10 Teams",
     )
-    fig.update_layout(
+    bar_fig.update_layout(
         paper_bgcolor="#111827",
         plot_bgcolor="#111827",
         font_color="white",
+    )
+
+    games_by_year = (
+        filtered_games.groupby("year")
+        .size()
+        .reset_index(name="total_games")
+        .sort_values("year")
+    )
+
+    line_fig = px.line(
+        games_by_year,
+        x="year",
+        y="total_games",
+        markers=True,
+        title="Total Games Played by Year",
+    )
+    line_fig.update_layout(
+        paper_bgcolor="#111827",
+        plot_bgcolor="#111827",
+        font_color="white",
+        xaxis_title="Year",
+        yaxis_title="Games Played",
     )
 
     return (
@@ -267,7 +307,8 @@ def update_dashboard(selected_conference, selected_decade):
         make_card("First Year", first_year),
         make_card("Last Year", last_year),
         table_data,
-        fig,
+        bar_fig,
+        line_fig,
     )
 
 
