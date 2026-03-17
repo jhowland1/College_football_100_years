@@ -3,7 +3,6 @@ import pandas as pd
 import plotly.express as px
 from dash import Dash, Input, Output, dcc, html, dash_table
 
-
 DATA_PATH = "data/cfb_games.pkl"
 BACKGROUND_COLOR = "#0f172a"
 PANEL_COLOR = "#111827"
@@ -97,6 +96,22 @@ def apply_figure_theme(fig):
     return fig
 
 
+def build_year_marks(min_year, max_year, interval=25):
+    start_mark = (min_year // interval) * interval
+    if start_mark < min_year:
+        start_mark += interval
+
+    marks = {
+        min_year: {"label": str(min_year), "style": {"color": "black", "fontSize": "12px"}},
+        max_year: {"label": str(max_year), "style": {"color": "black", "fontSize": "12px"}},
+    }
+
+    for year in range(start_mark, max_year + 1, interval):
+        marks[year] = {"label": str(year), "style": {"color": "black", "fontSize": "12px"}}
+
+    return dict(sorted(marks.items()))
+
+
 def load_data():
     df = pd.read_pickle(DATA_PATH).copy()
 
@@ -129,10 +144,10 @@ def load_data():
     return appearances_df, games_df
 
 
-def filter_appearances(df, selected_conferences, decade_range):
-    start_decade, end_decade = decade_range
+def filter_appearances(df, selected_conferences, year_range):
+    start_year, end_year = year_range
 
-    filtered = df[(df["decade"] >= start_decade) & (df["decade"] <= end_decade)].copy()
+    filtered = df[(df["year"] >= start_year) & (df["year"] <= end_year)].copy()
 
     if selected_conferences:
         filtered = filtered[filtered["conference"].isin(selected_conferences)]
@@ -140,10 +155,10 @@ def filter_appearances(df, selected_conferences, decade_range):
     return filtered
 
 
-def filter_games(df, selected_conferences, decade_range):
-    start_decade, end_decade = decade_range
+def filter_games(df, selected_conferences, year_range):
+    start_year, end_year = year_range
 
-    filtered = df[(df["decade"] >= start_decade) & (df["decade"] <= end_decade)].copy()
+    filtered = df[(df["year"] >= start_year) & (df["year"] <= end_year)].copy()
 
     if selected_conferences:
         filtered = filtered[
@@ -157,14 +172,11 @@ def filter_games(df, selected_conferences, decade_range):
 appearances_df, games_df = load_data()
 
 all_conferences = sorted(appearances_df["conference"].unique())
-min_decade = int(appearances_df["decade"].min())
-max_decade = int(appearances_df["decade"].max())
+min_year = int(appearances_df["year"].min())
+max_year = int(appearances_df["year"].max())
+year_marks = build_year_marks(min_year, max_year, interval=25)
 
 conference_options = [{"label": conference, "value": conference} for conference in all_conferences]
-decade_marks = {
-    decade: {"label": f"{decade}s", "style": {"color": MUTED_TEXT_COLOR}}
-    for decade in range(min_decade, max_decade + 10, 10)
-}
 
 app = Dash(__name__)
 server = app.server
@@ -195,7 +207,7 @@ app.layout = html.Div(
                             },
                         ),
                         html.P(
-                            "Explore conference activity over time with multi-select filters, decade range controls, trend analysis, and a decade heatmap.",
+                            "Explore conference activity over time with multi-select filters, year range controls, trend analysis, and a decade heatmap.",
                             style={
                                 "margin": "0",
                                 "fontSize": "15px",
@@ -251,7 +263,7 @@ app.layout = html.Div(
                                 html.Div(
                                     children=[
                                         html.Label(
-                                            "Decade Range",
+                                            "Year Range",
                                             style={
                                                 "display": "block",
                                                 "marginBottom": "14px",
@@ -260,12 +272,12 @@ app.layout = html.Div(
                                             },
                                         ),
                                         dcc.RangeSlider(
-                                            id="decade-range",
-                                            min=min_decade,
-                                            max=max_decade,
-                                            step=10,
-                                            value=[min_decade, max_decade],
-                                            marks=decade_marks,
+                                            id="year-range",
+                                            min=min_year,
+                                            max=max_year,
+                                            step=1,
+                                            value=[min_year, max_year],
+                                            marks=year_marks,
                                             allowCross=False,
                                             tooltip={"placement": "bottom", "always_visible": False},
                                         ),
@@ -396,13 +408,13 @@ app.layout = html.Div(
     Output("teams-table", "data"),
     Output("teams-bar-chart", "figure"),
     Input("conference-filter", "value"),
-    Input("decade-range", "value"),
+    Input("year-range", "value"),
 )
-def update_dashboard(selected_conferences, decade_range):
+def update_dashboard(selected_conferences, year_range):
     selected_conferences = selected_conferences or []
 
-    filtered_appearances = filter_appearances(appearances_df, selected_conferences, decade_range)
-    filtered_games = filter_games(games_df, selected_conferences, decade_range)
+    filtered_appearances = filter_appearances(appearances_df, selected_conferences, year_range)
+    filtered_games = filter_games(games_df, selected_conferences, year_range)
 
     if filtered_appearances.empty:
         empty_line = apply_figure_theme(px.line(title="No data available"))
@@ -508,7 +520,7 @@ def update_dashboard(selected_conferences, decade_range):
 
     return (
         make_card("Total Appearances", f"{total_appearances:,}", selected_label),
-        make_card("Total Games", f"{total_games:,}", f"Decades {decade_range[0]}s–{decade_range[1]}s"),
+        make_card("Total Games", f"{total_games:,}", f"Years {year_range[0]}–{year_range[1]}"),
         make_card("Unique Teams", f"{unique_teams:,}", "Teams in filtered view"),
         make_card("Year Span", f"{first_year}–{last_year}", "Observed seasons"),
         trend_fig,
