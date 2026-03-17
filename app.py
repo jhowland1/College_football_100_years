@@ -1,32 +1,64 @@
-from dash import Dash, html
 import pandas as pd
+import numpy as np
+import plotly.express as px
+from dash import Dash, Input, Output, dcc, html, dash_table
 
-app = Dash(__name__)
-server = app.server
+def card_style():
+    return {
+        "backgroundColor": "#111827",
+        "padding": "18px",
+        "borderRadius": "12px",
+        "border": "1px solid #334155",
+    }
 
-app.layout = html.Div([
-    html.H1("College Football Dashboard")
-])
 
-app_df = pd.read_pickle("data/cfb_games.pkl")
+def panel_style():
+    return {
+        "backgroundColor": "#111827",
+        "padding": "18px",
+        "borderRadius": "12px",
+        "border": "1px solid #334155",
+    }
+data_path = "data/cfb_games.pkl"
+
+df = pd.read_pickle(data_path)
+
+df = df.copy()
+df["date"] = pd.to_datetime(df["timestamp"], unit="s", errors="coerce")
+df["year"] = df["date"].dt.year
+df["decade"] = (df["year"] // 10) * 10
+
+team1_df = df[["date", "year", "decade", "Team1", "Conf1"]].copy()
+team1_df.columns = ["date", "year", "decade", "team", "conference"]
+
+team2_df = df[["date", "year", "decade", "Team2", "Conf2"]].copy()
+team2_df.columns = ["date", "year", "decade", "team", "conference"]
+
+app_df = pd.concat([team1_df, team2_df], ignore_index=True)
+
+app_df["team"] = app_df["team"].astype(str).str.strip()
+app_df["conference"] = app_df["conference"].astype(str).str.strip()
+
+app_df["team"] = app_df["team"].replace({"nan": np.nan, "None": np.nan})
+app_df["conference"] = app_df["conference"].replace({"nan": np.nan, "None": np.nan})
 
 app_df = app_df.dropna(subset=["team", "year", "decade"])
-app_df["team"] = app_df["team"].astype(str).str.strip()
-app_df["conference"] = app_df["conference"].fillna("Unknown").astype(str).str.strip()
+app_df["conference"] = app_df["conference"].fillna("Unknown")
 app_df["year"] = app_df["year"].astype(int)
 app_df["decade"] = app_df["decade"].astype(int)
 
 conference_options = [{"label": "All Conferences", "value": "All"}] + [
     {"label": conf, "value": conf}
-    for conf in sorted(app_df["conference"].dropna().unique())
+    for conf in sorted(app_df["conference"].unique())
 ]
 
 decade_options = [{"label": "All Decades", "value": "All"}] + [
     {"label": f"{decade}s", "value": decade}
-    for decade in sorted(app_df["decade"].dropna().unique())
+    for decade in sorted(app_df["decade"].unique())
 ]
 
 app = Dash(__name__)
+server = app.server
 app.title = "College Football Dashboard"
 
 app.layout = html.Div(
@@ -40,7 +72,6 @@ app.layout = html.Div(
     children=[
         html.H1("College Football Conference Dashboard"),
         html.P("Filter by conference and decade."),
-
         html.Div(
             style={
                 "display": "grid",
@@ -50,7 +81,7 @@ app.layout = html.Div(
             },
             children=[
                 html.Div(
-                    children=[
+                    [
                         html.Label("Conference"),
                         dcc.Dropdown(
                             id="conference-filter",
@@ -61,7 +92,7 @@ app.layout = html.Div(
                     ]
                 ),
                 html.Div(
-                    children=[
+                    [
                         html.Label("Decade"),
                         dcc.Dropdown(
                             id="decade-filter",
@@ -73,7 +104,6 @@ app.layout = html.Div(
                 ),
             ],
         ),
-
         html.Div(
             style={
                 "display": "grid",
@@ -88,7 +118,6 @@ app.layout = html.Div(
                 html.Div(id="card-last", style=card_style()),
             ],
         ),
-
         html.Div(
             style={
                 "display": "grid",
@@ -116,12 +145,10 @@ app.layout = html.Div(
                                 "backgroundColor": "#1e293b",
                                 "color": "white",
                                 "fontWeight": "bold",
-                                "border": "1px solid #334155",
                             },
                             style_cell={
                                 "backgroundColor": "#111827",
                                 "color": "white",
-                                "border": "1px solid #334155",
                                 "padding": "10px",
                                 "textAlign": "left",
                             },
@@ -186,8 +213,8 @@ def update_dashboard(selected_conference, selected_decade):
         filtered = filtered[filtered["decade"] == selected_decade]
 
     if filtered.empty:
-        empty_fig = px.bar(title="No data available")
-        empty_fig.update_layout(
+        fig = px.bar(title="No data available")
+        fig.update_layout(
             paper_bgcolor="#111827",
             plot_bgcolor="#111827",
             font_color="white",
@@ -198,7 +225,7 @@ def update_dashboard(selected_conference, selected_decade):
             make_card("First Year", "—"),
             make_card("Last Year", "—"),
             [],
-            empty_fig,
+            fig,
         )
 
     total_appearances = len(filtered)
@@ -206,7 +233,7 @@ def update_dashboard(selected_conference, selected_decade):
     first_year = filtered["year"].min()
     last_year = filtered["year"].max()
 
-    team_summary_filtered = (
+    summary = (
         filtered.groupby(["team", "conference"])
         .agg(
             appearances=("team", "size"),
@@ -217,25 +244,21 @@ def update_dashboard(selected_conference, selected_decade):
         .sort_values(["appearances", "team"], ascending=[False, True])
     )
 
-    table_data = team_summary_filtered.head(15).to_dict("records")
-
-    chart_df = team_summary_filtered.head(10).sort_values("appearances", ascending=True)
+    table_data = summary.head(15).to_dict("records")
+    chart_df = summary.head(10).sort_values("appearances", ascending=True)
 
     fig = px.bar(
         chart_df,
         x="appearances",
         y="team",
-        orientation="h",
         color="conference",
+        orientation="h",
         title="Top 10 Teams",
     )
     fig.update_layout(
         paper_bgcolor="#111827",
         plot_bgcolor="#111827",
         font_color="white",
-        yaxis_title="Team",
-        xaxis_title="Appearances",
-        legend_title="Conference",
     )
 
     return (
