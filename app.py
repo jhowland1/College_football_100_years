@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 from dash import Dash, Input, Output, dcc, html, dash_table
 
+
 DATA_PATH = "data/cfb_games.pkl"
 BACKGROUND_COLOR = "#0f172a"
 PANEL_COLOR = "#111827"
