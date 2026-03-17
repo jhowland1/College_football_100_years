@@ -101,13 +101,15 @@ def build_year_marks(min_year, max_year, interval=25):
     if start_mark < min_year:
         start_mark += interval
 
+    mark_style = {"color": "white", "fontSize": "12px"}
+
     marks = {
-        min_year: {"label": str(min_year), "style": {"color": "black", "fontSize": "12px"}},
-        max_year: {"label": str(max_year), "style": {"color": "black", "fontSize": "12px"}},
+        min_year: {"label": str(min_year), "style": mark_style},
+        max_year: {"label": str(max_year), "style": mark_style},
     }
 
     for year in range(start_mark, max_year + 1, interval):
-        marks[year] = {"label": str(year), "style": {"color": "black", "fontSize": "12px"}}
+        marks[year] = {"label": str(year), "style": mark_style}
 
     return dict(sorted(marks.items()))
 
